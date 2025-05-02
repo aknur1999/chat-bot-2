@@ -449,6 +449,52 @@ export default function ConversationClient({ conversationId }: ConversationClien
     }
   };
 
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    if (!user || isSubmitting || isUploading) return;
+    
+    const clipboardItems = e.clipboardData.items;
+    const imageItem = Array.from(clipboardItems).find(item => 
+      item.type.indexOf('image') !== -1
+    );
+    
+    if (imageItem && model === 'gpt-4.1-mini') {
+      e.preventDefault();
+      
+      try {
+        setIsUploading(true);
+        
+        // Get the image as a blob
+        const blob = imageItem.getAsFile();
+        if (!blob) return;
+        
+        // Create a unique file path
+        const fileExt = blob.type.split('/')[1] || 'png';
+        const fileName = `clipboard_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
+        
+        // Upload the file to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('chat-images')
+          .upload(filePath, blob);
+        
+        if (uploadError) throw uploadError;
+        
+        // Get the public URL
+        const { data: urlData } = supabase.storage
+          .from('chat-images')
+          .getPublicUrl(filePath);
+        
+        // Set the uploaded image URL to state
+        setUploadedImageUrl(urlData.publicUrl);
+      } catch (error) {
+        console.error('Error uploading pasted image:', error);
+        alert('Failed to upload pasted image');
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  }, [user, isSubmitting, isUploading, model]);
+
   if (!user) {
     return null;
   }
@@ -484,12 +530,19 @@ export default function ConversationClient({ conversationId }: ConversationClien
                         width={300}
                         height={300}
                         style={{ maxHeight: '300px', objectFit: 'contain' }}
+                        unoptimized={true}
+                        onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                          console.error('Error loading image in message:', message.id);
+                          e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM4ODg4ODgiPkltYWdlIGZhaWxlZCB0byBsb2FkPC90ZXh0Pjwvc3ZnPg==';
+                        }}
                       />
                       {message.content && message.content !== '[Image]' && <p className="mt-2">{message.content}</p>}
                     </div>
                   ) : message.is_image ? (
                     <div className="mt-2">
-                      <p>Image unavailable</p>
+                      <div className="bg-gray-200 rounded-md p-4 text-center text-gray-500">
+                        <p>Image unavailable</p>
+                      </div>
                     </div>
                   ) : (
                     <p>{message.content}</p>
@@ -515,8 +568,9 @@ export default function ConversationClient({ conversationId }: ConversationClien
                 width={80}
                 height={80}
                 style={{ objectFit: 'contain' }}
+                unoptimized={true}
                 onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                  console.error('Error loading image preview');
+                  console.error('Error loading image preview for URL:', uploadedImageUrl);
                   e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgZm9udC1mYW1pbHk9IkFyaWFsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4ODg4Ij5JbWFnZSBub3QgYXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg==';
                 }}
               />
@@ -555,9 +609,10 @@ export default function ConversationClient({ conversationId }: ConversationClien
             <Input 
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder={isUploading ? "Uploading image..." : "Type your message here..."}
+              placeholder={isUploading ? "Uploading image from clipboard..." : "Type your message here..."}
               className="flex-1"
               disabled={isSubmitting || isUploading}
+              onPaste={handlePaste}
             />
             <Button 
               type="submit" 
