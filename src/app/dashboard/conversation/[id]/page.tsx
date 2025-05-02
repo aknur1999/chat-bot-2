@@ -2,10 +2,10 @@ import React from 'react'
 import ConversationClient from './ConversationClient'
 
 // This is a server component
-export default function ConversationPage({ params }: { params: { id: string } }) {
-  // Properly unwrap params in the server component
-  const conversationId = React.use(Promise.resolve(params)).id
+export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
+  // Get the conversation ID from the params promise
+  const { id: conversationId } = await params
   
-  // Pass the unwrapped ID to the client component
+  // Pass the ID to the client component
   return <ConversationClient conversationId={conversationId} />
 } 

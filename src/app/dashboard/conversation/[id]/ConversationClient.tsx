@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Image, Mic } from 'lucide-react'
+import { ImageIcon, Mic } from 'lucide-react'
 import { AudioRecordingIndicator } from '@/components/AudioRecordingIndicator'
+import NextImage from 'next/image'
 
 interface Message {
   id: string
@@ -38,9 +39,11 @@ export default function ConversationClient({ conversationId }: ConversationClien
   const router = useRouter()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const scrollToBottom = (behavior: 'auto' | 'smooth' = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior })
-  }
+  const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' })
+    }
+  }, [messagesEndRef])
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
@@ -49,6 +52,24 @@ export default function ConversationClient({ conversationId }: ConversationClien
     }
   }, [messages])
 
+  const fetchMessages = useCallback(async (conversationId: string) => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching messages:', error)
+      return
+    }
+
+    setMessages(data || [])
+    // Scroll to bottom immediately on first load
+    setTimeout(() => scrollToBottom('auto'), 100)
+  }, [scrollToBottom]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -62,7 +83,7 @@ export default function ConversationClient({ conversationId }: ConversationClien
     }
 
     getUser()
-  }, [router, conversationId])
+  }, [router, conversationId, fetchMessages, scrollToBottom])
 
   const fetchConversationModel = async (conversationId: string) => {
     const { data, error } = await supabase
@@ -79,23 +100,6 @@ export default function ConversationClient({ conversationId }: ConversationClien
     if (data?.model) {
       setModel(data.model)
     }
-  }
-
-  const fetchMessages = async (conversationId: string) => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching messages:', error)
-      return
-    }
-
-    setMessages(data || [])
-    // Scroll to bottom immediately on first load
-    setTimeout(() => scrollToBottom('auto'), 100)
   }
 
   // Function to get AI response from API
@@ -473,11 +477,13 @@ export default function ConversationClient({ conversationId }: ConversationClien
                   </div>
                   {message.image_url ? (
                     <div className="mt-2">
-                      <img 
+                      <NextImage 
                         src={message.image_url} 
                         alt="Uploaded image" 
                         className="max-w-full rounded-md mb-2" 
-                        style={{ maxHeight: '300px' }}
+                        width={300}
+                        height={300}
+                        style={{ maxHeight: '300px', objectFit: 'contain' }}
                       />
                       {message.content && message.content !== '[Image]' && <p className="mt-2">{message.content}</p>}
                     </div>
@@ -502,11 +508,14 @@ export default function ConversationClient({ conversationId }: ConversationClien
         <div className="mx-auto max-w-4xl">
           {uploadedImageUrl && (
             <div className="mb-2 relative inline-block">
-              <img 
+              <NextImage 
                 src={uploadedImageUrl} 
                 alt="Upload preview" 
                 className="h-20 rounded-md"
-                onError={(e) => {
+                width={80}
+                height={80}
+                style={{ objectFit: 'contain' }}
+                onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                   console.error('Error loading image preview');
                   e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgZm9udC1mYW1pbHk9IkFyaWFsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4ODg4Ij5JbWFnZSBub3QgYXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg==';
                 }}
@@ -529,7 +538,7 @@ export default function ConversationClient({ conversationId }: ConversationClien
                 title="Upload image"
                 disabled={isUploading || isSubmitting}
               >
-                <Image size={20} className={`${isUploading ? 'text-gray-400' : 'text-gray-600'}`} />
+                <ImageIcon size={20} className={`${isUploading ? 'text-gray-400' : 'text-gray-600'}`} />
               </button>
             )}
             {model === 'gpt-4o-mini-audio-preview' && (

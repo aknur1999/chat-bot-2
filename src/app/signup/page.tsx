@@ -29,8 +29,8 @@ export default function SignUpPage() {
       if (error) throw error
 
       router.push('/dashboard')
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: Error | unknown) {
+      setError(error instanceof Error ? error.message : 'An unknown error occurred')
     } finally {
       setLoading(false)
     }
