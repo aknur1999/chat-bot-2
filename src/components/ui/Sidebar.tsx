@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, MessageSquarePlus, LogOut, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { ModelSelectionModal } from '@/components/ModelSelectionModal';
 
 export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [conversations, setConversations] = useState<Array<{ id: string; title: string }>>([]);
+  const [isModelSelectionOpen, setIsModelSelectionOpen] = useState(false);
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -16,7 +18,11 @@ export function Sidebar() {
     router.push('/login');
   };
 
-  const handleNewChat = async () => {
+  const handleNewChatClick = () => {
+    setIsModelSelectionOpen(true);
+  };
+
+  const handleCreateChat = async (modelId: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -30,7 +36,8 @@ export function Sidebar() {
         .insert([
           {
             title: 'New Conversation',
-            user_id: user.id
+            user_id: user.id,
+            model: modelId
           }
         ])
         .select()
@@ -155,12 +162,19 @@ export function Sidebar() {
     <div className="w-64 h-screen bg-white border-r border-gray-200 flex flex-col fixed">
       {/* New Chat Button */}
       <button 
-        onClick={handleNewChat}
+        onClick={handleNewChatClick}
         className="m-4 p-3 flex items-center gap-2 rounded-lg hover:bg-gray-100 transition-colors"
       >
         <MessageSquarePlus size={20} />
         <span>New Chat</span>
       </button>
+
+      {/* Model Selection Modal */}
+      <ModelSelectionModal 
+        isOpen={isModelSelectionOpen}
+        onClose={() => setIsModelSelectionOpen(false)}
+        onSelectModel={handleCreateChat}
+      />
 
       {/* Search Bar */}
       <div className="px-4 mb-4">
